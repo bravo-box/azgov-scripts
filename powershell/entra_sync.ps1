@@ -1,80 +1,167 @@
-#Connect to Microsoft Graph
-$clientID = [System.Environment]::GetEnvironmentVariable("ClientID", "Machine")
-$clientSecret = [System.Environment]::GetEnvironmentVariable("clientSecret", "Machine")
-$tenantId = [System.Environment]::GetEnvironmentVariable("TenantID", "Machine")
-$secureClientSecret = ConvertTo-SecureString $clientSecret -AsPlainText -Force
-# Define the group name for which you want to sync
+# =========================================
+#       SETTING UP VARIABLES
+# =========================================
+$LogDirectory = "C:\Logs\EntraToADSync"
+$EventLogName = "EntraToADSync"
+$EventSource  = "EntraToADSyncScript"
 $GroupName = "AD_Security_Group_Name"
-# Define Active Directory target OU
-$OU = "OU=sync,DC=jumpstart,DC=local"  # Change to match your AD structure
+$OU = "OU=sync,DC=jumpstart,DC=local"
 
-# Create a PSCredential Object Using the Client ID and Secure Client Secret
-$ClientSecretCredential = New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList $ClientId, $secureClientSecret
-# Connect to Microsoft Graph Using the Tenant ID and Client Secret Credential
-Connect-MgGraph -Environment USGov -TenantId $tenantId -ClientSecretCredential $ClientSecretCredential
 
-# Get the group ObjectId
-$Group = Get-MgGroup -Filter "DisplayName eq '$GroupName'"
-if ($Group -eq $null) {
-    Write-Host "Group '$GroupName' not found!"
+# =========================================
+#       LOGGING SETUP (FILE + JSON)
+# =========================================
+$TextLogFile = "$LogDirectory\SyncLog_$(Get-Date -Format 'yyyy-MM-dd').log"
+$JsonLogFile = "$LogDirectory\SyncLog_$(Get-Date -Format 'yyyy-MM-dd').json"
+
+if (!(Test-Path $LogDirectory)) {
+    New-Item -ItemType Directory -Path $LogDirectory | Out-Null
+}
+
+# =========================================
+#       EVENT VIEWER LOG SETUP
+# =========================================
+if (-not [System.Diagnostics.EventLog]::SourceExists($EventSource)) {
+    New-EventLog -LogName $EventLogName -Source $EventSource
+} else {
+    # Ensure the log name matches the existing source
+    $currentLog = [System.Diagnostics.EventLog]::LogNameFromSourceName($EventSource, ".")
+    if ($currentLog -ne $EventLogName) {
+        Write-Warning "Event source '$EventSource' already exists under log '$currentLog'."
+    }
+}
+
+# =========================================
+#            WRITE-LOG FUNCTION
+# =========================================
+function Write-Log {
+    param(
+        [string]$Message,
+        [string]$Level = "INFO",
+        [string]$User = "",
+        [string]$Operation = "",
+        [string]$Exception = ""
+    )
+
+    $timestamp = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
+
+    # Build JSON log structure
+    $logObject = [PSCustomObject]@{
+        timestamp = $timestamp
+        level     = $Level
+        message   = $Message
+        user      = $User
+        operation = $Operation
+        exception = $Exception
+    }
+
+    $json = $logObject | ConvertTo-Json -Depth 5
+
+    # Write JSON log
+    Add-Content -Path $JsonLogFile -Value ($json + "`n")
+
+    # Write Text log
+    $logLine = "[$timestamp] [$Level] $Message"
+    Add-Content -Path $TextLogFile -Value $logLine
+
+    # Write Console Output
+    switch ($Level) {
+        "INFO"  { Write-Host $logLine -ForegroundColor White }
+        "WARN"  { Write-Host $logLine -ForegroundColor Yellow }
+        "ERROR" { Write-Host $logLine -ForegroundColor Red }
+    }
+
+    # Event Viewer Logging
+    switch ($Level) {
+        "INFO"  { Write-EventLog -LogName $EventLogName -Source $EventSource -EntryType Information -EventId 1000 -Message $Message }
+        "WARN"  { Write-EventLog -LogName $EventLogName -Source $EventSource -EntryType Warning     -EventId 2000 -Message $Message }
+        "ERROR" { Write-EventLog -LogName $EventLogName -Source $EventSource -EntryType Error       -EventId 3000 -Message "$Message `nException: $Exception" }
+    }
+}
+
+Write-Log "=== Starting Entra ID → Active Directory Sync ==="
+
+# =========================================
+#       GRAPH CONNECTION
+# =========================================
+$clientID        = [Environment]::GetEnvironmentVariable("ClientID", "Machine")
+$clientSecret    = [Environment]::GetEnvironmentVariable("clientSecret", "Machine")
+$tenantId        = [Environment]::GetEnvironmentVariable("TenantID", "Machine")
+$secureClientSecret = ConvertTo-SecureString $clientSecret -AsPlainText -Force
+
+$ClientSecretCredential = New-Object System.Management.Automation.PSCredential ($clientID, $secureClientSecret)
+
+Write-Log "Connecting to Microsoft Graph…" "INFO" "" "ConnectGraph"
+
+try {
+    Connect-MgGraph -Environment USGov -TenantId $tenantId -ClientSecretCredential $ClientSecretCredential -ErrorAction Stop
+    Write-Log "Connected to Microsoft Graph" "INFO" "" "ConnectGraph"
+}
+catch {
+    Write-Log "Failed to connect to MS Graph" "ERROR" "" "ConnectGraph" $_.Exception.Message
     exit
 }
 
-# Get members of the group
-$Users = Get-MgGroupMember -GroupId $Group.Id -All | ForEach-Object {
-    Get-MgUser -UserId $_.Id -Property DisplayName, UserPrincipalName, Mail, GivenName, Surname
+# =========================================
+#       GET GROUP MEMBERS
+# =========================================
+$Group = Get-MgGroup -Filter "DisplayName eq '$GroupName'"
+
+if (!$Group) {
+    Write-Log "Group '$GroupName' not found." "ERROR" "" "GetGroup"
+    exit
 }
 
-# Get users from Entra ID and sync to Active Directory
+Write-Log "Group found: $GroupName (ID: $($Group.Id))" "INFO" "" "GetGroup"
+
+$Users = Get-MgGroupMember -GroupId $Group.Id -All | ForEach-Object {
+    Get-MgUser -UserId $_.Id -Property DisplayName,UserPrincipalName,Mail,GivenName,Surname
+}
+
+Write-Log "Retrieved $($Users.Count) users from Entra ID" "INFO" "" "GetGroupMembers"
+
+# =========================================
+#       SYNC USERS TO AD
+# =========================================
 foreach ($User in $Users) {
+    $UPN = $User.UserPrincipalName
+    $Name = $User.DisplayName
+
+    Write-Log "Processing user $Name ($UPN)" "INFO" $UPN "ProcessUser"
+
+    if (-not $UPN) {
+        Write-Log "Skipping user (no UPN): $Name" "WARN" $Name "Validation"
+        continue
+    }
+
+    $SamAccountName = if ($User.Mail) { ($User.Mail -split "@")[0] } else { ($UPN -split "@")[0] }
+    $ExistingUser = Get-ADUser -Filter { SamAccountName -eq $SamAccountName } -ErrorAction SilentlyContinue
+
+    if ($ExistingUser) {
+        Write-Log "User already exists in AD: $SamAccountName" "INFO" $UPN "ExistsCheck"
+        continue
+    }
+
+    Write-Log "Creating AD user: $SamAccountName" "INFO" $UPN "CreateUser"
+
     try {
-        # Debugging: Log user details
-        Write-Host "Processing: $($User.DisplayName) | UPN: $($User.UserPrincipalName) | Mail: $($User.Mail)"
+        New-ADUser -SamAccountName $SamAccountName `
+                   -UserPrincipalName $UPN `
+                   -Name $Name `
+                   -GivenName $User.GivenName `
+                   -Surname $User.Surname `
+                   -EmailAddress $User.Mail `
+                   -Path $OU `
+                   -AccountPassword (ConvertTo-SecureString "P@ssw0rd123!" -AsPlainText -Force) `
+                   -ChangePasswordAtLogon $true `
+                   -Enabled $true
 
-        # Ensure the user has required attributes
-        if (-not $User.UserPrincipalName) {
-            Write-Warning "Skipping user: $($User.DisplayName) (Missing UPN)"
-            continue
-        }
-
-        # Use Mail if available, otherwise use UserPrincipalName for SamAccountName
-        $SamAccountName = if ($User.Mail) { ($User.Mail -split "@")[0] } else { ($User.UserPrincipalName -split "@")[0] }
-        $UserPrincipalName = $User.UserPrincipalName  # Ensure UPN is defined
-
-        # **Check if the user exists in Active Directory**
-        $ExistingUser = Get-ADUser -Filter {SamAccountName -eq $SamAccountName} -ErrorAction SilentlyContinue
-
-        if ($ExistingUser) {
-            Write-Host "User already exists: $SamAccountName" -ForegroundColor Yellow
-        } else {
-            Write-Host "Creating new user: $SamAccountName"
-
-            # Try to create the AD user and catch any errors
-            try {
-                New-ADUser -SamAccountName $SamAccountName `
-                           -UserPrincipalName $UserPrincipalName `
-                           -Name $User.DisplayName `
-                           -GivenName $User.GivenName `
-                           -Surname $User.Surname `
-                           -EmailAddress $User.Mail `
-                           -Path $OU `
-                           -AccountPassword (ConvertTo-SecureString "P@ssw0rd123!" -AsPlainText -Force) `
-                           -ChangePasswordAtLogon $true `
-                           -Enabled $true
-                Write-Host "User created successfully: $SamAccountName" -ForegroundColor Green
-            }
-            catch {
-                if ($_.Exception.Message -match "The specified account already exists") {
-                    Write-Host "Error: User $SamAccountName already exists." -ForegroundColor Red
-                } else {
-                    Write-Host "Unexpected error creating user $SamAccountName':' $_" -ForegroundColor Red
-                }
-            }
-        }
+        Write-Log "User created successfully: $SamAccountName" "INFO" $UPN "CreateUser"
     }
     catch {
-        Write-Host "Error processing user $($User.DisplayName): $_" -ForegroundColor Red
+        Write-Log "FAILED to create AD user: $SamAccountName" "ERROR" $UPN "CreateUser" $_.Exception.Message
     }
 }
 
 Disconnect-MgGraph
+Write-Log "=== Sync Completed ===" "INFO" "" "Complete"
