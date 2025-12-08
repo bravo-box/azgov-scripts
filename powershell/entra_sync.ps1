@@ -1,12 +1,41 @@
 # =========================================
 #       SETTING UP VARIABLES
 # =========================================
+
+$GroupName = "AD_Security_Group_Name"
+$OU = "OU=sync,DC=jumpstart,DC=local"
 $LogDirectory = "C:\Logs\EntraToADSync"
 $EventLogName = "EntraToADSync"
 $EventSource  = "EntraToADSyncScript"
-$GroupName = "AD_Security_Group_Name"
-$OU = "OU=sync,DC=jumpstart,DC=local"
+$Pass = "P@ssw0rd123!"  # Default password for new users
+$secureFolder = "C:\Secure\AzureApp"
+$encryptedTenantId = "tenantId.bin"
+$encryptedClientId = "clientId.bin"
+$encryptedClientSecret = "clientSecret.bin"
 
+# =========================================
+#       SETUP DECRYPTION FUNCTION
+# =========================================
+
+function Unprotect-String {
+    param(
+        [Parameter(Mandatory)][string]$Path
+    )
+
+    $protected = Get-Content -Path $Path -Encoding Byte
+
+    $unprotected = [System.Security.Cryptography.ProtectedData]::Unprotect(
+        $protected,
+        $null,
+        [System.Security.Cryptography.DataProtectionScope]::LocalMachine
+    )
+
+    return [System.Text.Encoding]::UTF8.GetString($unprotected)
+}
+
+$tenantID = Unprotect-String -Path "$secureFolder\$encryptedTenantId"
+$clientID = Unprotect-String -Path "$secureFolder\$encryptedClientId"
+$clientSecret = Unprotect-String -Path "$secureFolder\$encryptedClientSecret"
 
 # =========================================
 #       LOGGING SETUP (FILE + JSON)
@@ -84,9 +113,7 @@ Write-Log "=== Starting Entra ID → Active Directory Sync ==="
 # =========================================
 #       GRAPH CONNECTION
 # =========================================
-$clientID        = [Environment]::GetEnvironmentVariable("ClientID", "Machine")
-$clientSecret    = [Environment]::GetEnvironmentVariable("clientSecret", "Machine")
-$tenantId        = [Environment]::GetEnvironmentVariable("TenantID", "Machine")
+
 $secureClientSecret = ConvertTo-SecureString $clientSecret -AsPlainText -Force
 
 $ClientSecretCredential = New-Object System.Management.Automation.PSCredential ($clientID, $secureClientSecret)
@@ -152,7 +179,7 @@ foreach ($User in $Users) {
                    -Surname $User.Surname `
                    -EmailAddress $User.Mail `
                    -Path $OU `
-                   -AccountPassword (ConvertTo-SecureString "P@ssw0rd123!" -AsPlainText -Force) `
+                   -AccountPassword (ConvertTo-SecureString "$Pass" -AsPlainText -Force) `
                    -ChangePasswordAtLogon $true `
                    -Enabled $true
 
