@@ -3,7 +3,7 @@
 # =========================================
 
 $GroupName = "AD_Security_Group_Name"
-$OU = "OU=sync,DC=jumpstart,DC=local"
+$OU = "OU=,DC=,DC="
 $LogDirectory = "C:\Logs\EntraToADSync"
 $EventLogName = "EntraToADSync"
 $EventSource  = "EntraToADSyncScript"
