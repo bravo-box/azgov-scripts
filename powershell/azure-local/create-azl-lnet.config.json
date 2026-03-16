@@ -1,6 +1,5 @@
 {
   "location": "usgovvirginia",
-  "customLocationName": "ciu-cdw",
   "logicalNetworks": [
     {
       "name": "mylocal-lnet-static-01",
