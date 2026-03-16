@@ -1,0 +1,30 @@
+{
+  "location": "usgovvirginia",
+  "customLocationName": "ciu-cdw",
+  "logicalNetworks": [
+    {
+      "name": "mylocal-lnet-static-01",
+      "ipAllocationMethod": "Static",
+      "addressPrefixes": "192.168.180.0/24",
+      "gateway": "192.168.180.1",
+      "dnsServers": "192.168.180.222",
+      "vlan": 201
+    },
+    {
+      "name": "mylocal-lnet-static-02",
+      "ipAllocationMethod": "Static",
+      "addressPrefixes": "192.168.181.0/24",
+      "gateway": "192.168.181.1",
+      "dnsServers": "192.168.181.222",
+      "vlan": 202
+    },
+    {
+      "name": "mylocal-lnet-static-03",
+      "ipAllocationMethod": "Static",
+      "addressPrefixes": "192.168.182.0/24",
+      "gateway": "192.168.182.1",
+      "dnsServers": "192.168.182.222",
+      "vlan": 203
+    }
+  ]
+}
