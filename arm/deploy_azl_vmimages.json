@@ -1,0 +1,141 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "description": "ARM template to deploy Azure Local VM images from Azure Storage Account",
+    "author": "Azure Local Team",
+    "version": "1.0.0"
+  },
+  "parameters": {
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]",
+      "metadata": {
+        "description": "Location for the Azure Local resources"
+      }
+    },
+    "customLocationId": {
+      "type": "string",
+      "metadata": {
+        "description": "The resource ID of the Azure Local custom location (e.g., /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/microsoft.extendedlocation/customlocations/{customLocationName})"
+      }
+    },
+    "imageName": {
+      "type": "string",
+      "metadata": {
+        "description": "Name of the gallery image to create"
+      }
+    },
+    "storageAccountName": {
+      "type": "string",
+      "metadata": {
+        "description": "Name of the Azure Storage Account containing the VM image (VHD or other format)"
+      }
+    },
+    "storageAccountResourceGroup": {
+      "type": "string",
+      "metadata": {
+        "description": "Resource group containing the storage account"
+      }
+    },
+    "storageAccountSubscription": {
+      "type": "string",
+      "metadata": {
+        "description": "Subscription ID containing the storage account"
+      }
+    },
+    "imagePath": {
+      "type": "secureString",
+      "metadata": {
+        "description": "Full blob URL including read-only SAS token for the image object"
+      }
+    },
+    "containerName": {
+      "type": "string",
+      "defaultValue": "vhds",
+      "metadata": {
+        "description": "Name of the blob container in the storage account"
+      }
+    },
+    "imageBlobName": {
+      "type": "string",
+      "metadata": {
+        "description": "Name of the image blob/file in the storage account (e.g., Windows2022.vhd or ubuntu-22.04.vhd)"
+      }
+    },
+    "osType": {
+      "type": "string",
+      "defaultValue": "Windows",
+      "allowedValues": [
+        "Windows",
+        "Linux"
+      ],
+      "metadata": {
+        "description": "Operating system type of the image"
+      }
+    },
+    "hyperVGeneration": {
+      "type": "string",
+      "defaultValue": "V2",
+      "allowedValues": [
+        "V1",
+        "V2"
+      ],
+      "metadata": {
+        "description": "Hyper-V generation for the image"
+      }
+    },
+    "imageVersion": {
+      "type": "string",
+      "defaultValue": "1.0.0",
+      "metadata": {
+        "description": "Version of the image"
+      }
+    },
+    "tags": {
+      "type": "object",
+      "defaultValue": {
+        "env": "production",
+        "managedBy": "armTemplate"
+      },
+      "metadata": {
+        "description": "Tags to apply to resources"
+      }
+    }
+  },
+  "variables": {
+    "imageId": "[resourceId('Microsoft.AzureStackHCI/galleryImages', parameters('imageName'))]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.AzureStackHCI/galleryImages",
+      "apiVersion": "2025-09-01-preview",
+      "name": "[parameters('imageName')]",
+      "location": "[parameters('location')]",
+      "extendedLocation": {
+        "type": "CustomLocation",
+        "name": "[parameters('customLocationId')]"
+      },
+      "tags": "[parameters('tags')]",
+      "properties": {
+        "osType": "[parameters('osType')]",
+        "hyperVGeneration": "[parameters('hyperVGeneration')]",
+        "identifier": {
+          "publisher": "AzureLocal",
+          "offer": "AzureLocal",
+          "sku": "[parameters('imageName')]"
+        },
+        "imagePath": "[parameters('imagePath')]",
+        "version": {
+          "name": "[parameters('imageVersion')]",
+          "properties": {
+            "storageProfile": {
+              "osDiskImage": {}
+            }
+          }
+        },
+        "cloudInitDataSource": "NoCloud"
+      }
+    }
+  ]
+}
