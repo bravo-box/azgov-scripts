@@ -1,11 +1,34 @@
-# Usage Instructions
+# Create Azure Local Logical Networks
 
-1. Download the ps1 and config.json to local machine
-2. Update your config.json file with your logical network configurations.
+This folder contains:
+
+- `create-azl-lnet.ps1`: deploys or updates Azure Local logical networks.
+- `create-azl-lnet.config.json`: input configuration file.
+
+## Prerequisites
+
+1. PowerShell 7+
+2. Az Powershell modules installed and signed in (`connect-azaccount`)
+3. Azure CLI extension `Az.StackHCIVM` installed
+4. Permissions to read resource groups and create/update Azure Local logical networks
+
+Optional but recommended:
+
+- Set your Az PowerShell context before running:
+
+```powershell
+Set-AzContext -Subscription "<subscription-id-or-name>"
+```
+
+If you do not provide `subscriptionId` in config or as a parameter, the script uses the current Az PowerShell context.
+
+## Configure Input File
+
+Edit `create-azl-lnet.config.json` with your logical network definitions.
 
 Example:
 
-``` json
+```json
 {
   "location": "usgovvirginia",
   "logicalNetworks": [
@@ -16,32 +39,58 @@ Example:
       "gateway": "192.168.180.1",
       "dnsServers": "192.168.180.222",
       "vlan": 201
-    },
-    {
-      "name": "mylocal-lnet-static-02",
-      "ipAllocationMethod": "Static",
-      "addressPrefixes": "192.168.181.0/24",
-      "gateway": "192.168.181.1",
-      "dnsServers": "192.168.181.222",
-      "vlan": 202
-    },
-    {
-      "name": "mylocal-lnet-static-03",
-      "ipAllocationMethod": "Static",
-      "addressPrefixes": "192.168.182.0/24",
-      "gateway": "192.168.182.1",
-      "dnsServers": "192.168.182.222",
-      "vlan": 203
     }
   ]
 }
 ```
 
-NOTE: you can add as many logical networks as you need, just add a new object defining your logical network.
+Notes:
 
-3. Log into Azure with the appropriate credentials which has access to create logical networks on the Azure Local.
-4. Ensure that your context is set to the subscription for the Azure Local that you want to deploy to.
-5. Run the pwsh file, enter the resource group where you want to logical network resource to deploy to. These do not need to be in the same RG as your cluster. 
-6. You will prompted for a custom location you want to be connected, select the corresponding number.
-7. If the script cannot find any other logical networks you will be prompted to enter your VMSwitch name. In Azure Local it is usually something like this: ```ConvergedSwitch(compute_management)```
+- `resourceGroup` and `customLocationId` are optional in config and can be selected/provided interactively.
+- `vmSwitchName` can be omitted; the script will try to discover it or prompt you.
+- Add as many logical network objects as needed under `logicalNetworks`.
 
+## How To Run
+
+From this folder:
+
+```powershell
+pwsh ./create-azl-lnet.ps1
+```
+
+With explicit config path:
+
+```powershell
+pwsh ./create-azl-lnet.ps1 -ConfigPath ./create-azl-lnet.config.json
+```
+
+With explicit subscription override:
+
+```powershell
+pwsh ./create-azl-lnet.ps1 -SubscriptionId "00000000-0000-0000-0000-000000000000"
+```
+
+Preview only (no changes):
+
+```powershell
+pwsh ./create-azl-lnet.ps1 -WhatIf
+```
+
+Allow updates when logical network already exists:
+
+```powershell
+pwsh ./create-azl-lnet.ps1 -UpdateIfExists
+```
+
+## Runtime Prompts
+
+During execution, the script may prompt you to:
+
+1. Enter a resource group (if missing/invalid in config)
+2. Enter a location (if missing in config)
+3. Select a custom location by number
+4. Select or enter `vmSwitchName` if it cannot be auto-resolved
+
+Common Azure Local switch name example:
+
+`ConvergedSwitch(compute_management)`
