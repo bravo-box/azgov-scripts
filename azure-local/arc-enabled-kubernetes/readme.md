@@ -1,4 +1,4 @@
-# Arc-Enabled Kubernetes Bash Scripts
+# Arc-Enabled Kubernetes Scripts (Bash & PowerShell)
 
 ## Overview
 
@@ -10,21 +10,26 @@ This folder contains helper scripts for common Azure Arc-enabled Kubernetes task
 
 Scripts in this folder:
 
-- `generate-service-token.sh`
-- `k8s_proxy.sh`
-- `sql-on-aks.sh`
+- `generate-service-token.sh` (Bash) or `generate-service-token.ps1` (PowerShell) — choose based on your platform
+- `k8s_proxy.sh` (Bash) or `k8s_proxy.ps1` (PowerShell) — choose based on your platform
+- `sql-on-aks.sh` (Bash)
 
 ## Prerequisites
 
 ## Required tools
 
+**All scripts:**
 - `az` (Azure CLI)
 - `kubectl`
+
+**Bash scripts:**
 - `jq` (required by `k8s_proxy.sh`)
 
-Optional but used by one script:
+**PowerShell scripts:**
+- PowerShell 7.0+ (recommended)
 
-- `pbcopy` on macOS (`generate-service-token.sh` copies token to clipboard)
+**Optional:**
+- `pbcopy` on macOS (bash `generate-service-token.sh` copies token to clipboard)
 
 ## Required Azure access
 
@@ -43,8 +48,14 @@ Optional but used by one script:
 
 1. Start Arc proxy (recommended for local admin operations):
 
+**Bash:**
 ```bash
 ./k8s_proxy.sh
+```
+
+**PowerShell:**
+```powershell
+./k8s_proxy.ps1
 ```
 
 2. In another terminal, validate cluster connectivity:
@@ -55,8 +66,14 @@ kubectl get nodes
 
 3. Optionally generate a Kubernetes token for the signed-in Azure user:
 
+**Bash:**
 ```bash
 ./generate-service-token.sh
+```
+
+**PowerShell:**
+```powershell
+./generate-service-token.ps1
 ```
 
 4. Deploy SQL Server workload:
@@ -67,7 +84,7 @@ kubectl get nodes
 
 ## Script Details
 
-## 1) k8s_proxy.sh
+## 1) k8s_proxy.sh (Bash) or k8s_proxy.ps1 (PowerShell)
 
 Purpose:
 
@@ -75,6 +92,8 @@ Purpose:
 - let you choose one interactively (if no cluster name argument is passed)
 - derive resource group and subscription automatically
 - start `az connectedk8s proxy`
+
+### Bash Version
 
 Usage:
 
@@ -102,11 +121,43 @@ Output highlights:
 - inferred subscription
 - proxy startup messages
 
-## 2) generate-service-token.sh
+### PowerShell Version
+
+Usage:
+
+```powershell
+./k8s_proxy.ps1
+./k8s_proxy.ps1 -ClusterName <cluster-name>
+./k8s_proxy.ps1 -Help
+```
+
+Behavior notes:
+
+- Checks for `az` and `kubectl` availability
+- Installs or upgrades Azure CLI extension `connectedk8s` if missing
+- If not logged in, prompts for cloud:
+	- `AzureCloud`
+	- `AzureUSGovernment`
+- Logs output to a timestamped file in the same directory:
+	- `k8s_proxy_YYYYMMDD_HHMMSS.log`
+- Proxy runs in foreground until Ctrl+C (or `Ctrl+A+D` in PowerShell)
+- Optional `-ClusterName` parameter for scripting; omit for interactive selection
+
+Output highlights:
+
+- selected cluster name
+- inferred resource group
+- inferred subscription
+- proxy startup messages
+- color-coded status messages
+
+## 2) generate-service-token.sh (Bash) or generate-service-token.ps1 (PowerShell)
 
 Purpose:
 
 - generate a Kubernetes token in namespace `default` for the currently signed-in Azure user object ID
+
+### Bash Version
 
 Usage:
 
@@ -118,13 +169,40 @@ What it does:
 
 - Calls `az ad signed-in-user show --query id`
 - Calls `kubectl create token <aad-object-id> -n default`
-- Copies token to clipboard with `pbcopy` when available
+- Copies token to clipboard with `pbcopy` on macOS
 - Prints token details to terminal
 
-Security note:
+### PowerShell Version
 
-- The script prints the full token to stdout at the end.
-- Treat terminal logs and shell history as sensitive when using this script.
+Usage:
+
+```powershell
+./generate-service-token.ps1
+```
+
+What it does:
+
+- Calls `az ad signed-in-user show --query id`
+- Calls `kubectl create token <aad-object-id> -n default`
+- Copies token to clipboard (cross-platform):
+  - Windows: uses `Set-Clipboard` cmdlet
+  - macOS: uses `pbcopy`
+  - Linux: attempts `pbcopy` or `xclip`
+- Prints token details to terminal with color-coded status messages
+
+Behavior notes:
+
+- Performs error checking on both Azure CLI and kubectl commands
+- Provides detailed error messages if operations fail
+- Gracefully handles clipboard failures (warns but continues)
+
+### Security Notes
+
+Both versions:
+
+- Print the full token to stdout at the end
+- Treat terminal logs and shell history as sensitive when using these scripts
+- Consider redirecting output to `/dev/null` after copying to clipboard in production
 
 ## 3) sql-on-aks.sh
 
@@ -169,9 +247,9 @@ Security note:
 
 Recommended order for most scenarios:
 
-1. Run `k8s_proxy.sh` and keep it open.
+1. Run `k8s_proxy.sh` (or `k8s_proxy.ps1` on PowerShell) and keep it open.
 2. Use a second terminal for `kubectl` commands.
-3. Optionally run `generate-service-token.sh` if you need an auth token.
+3. Optionally run `generate-service-token.sh` (or `generate-service-token.ps1` on PowerShell) if you need an auth token.
 4. Run `sql-on-aks.sh` to deploy SQL workload and Arc load balancer.
 
 ## Troubleshooting
