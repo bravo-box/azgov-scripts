@@ -7,6 +7,9 @@ param(
 	[string]$ConfigPath = "$PSScriptRoot/create-azl-lnet.config.json",
 
 	[Parameter(Mandatory = $false)]
+	[string]$SubscriptionId,
+
+	[Parameter(Mandatory = $false)]
 	[switch]$UpdateIfExists,
 
 	[Parameter(Mandatory = $false)]
@@ -44,12 +47,12 @@ function Test-AzCliReady {
 }
 
 function Get-CurrentSubscriptionId {
-	$account = Invoke-AzCliJson -Args @("account", "show", "--query", "{id:id}")
-	if (-not $account -or -not $account.id) {
-		throw "Unable to determine current subscription from Azure CLI context."
+	$context = Get-AzContext -ErrorAction SilentlyContinue
+	if (-not $context -or -not $context.Subscription -or [string]::IsNullOrWhiteSpace([string]$context.Subscription.Id)) {
+		throw "Unable to determine current subscription from Az PowerShell context. Run Connect-AzAccount and Set-AzContext."
 	}
 
-	return [string]$account.id
+	return [string]$context.Subscription.Id
 }
 
 function Test-ResourceGroupExists {
@@ -397,6 +400,18 @@ $hasSubscriptionId = $null -ne $config.PSObject.Properties['subscriptionId']
 $hasResourceGroup = $null -ne $config.PSObject.Properties['resourceGroup']
 $hasLocation = $null -ne $config.PSObject.Properties['location']
 $hasLogicalNetworks = $null -ne $config.PSObject.Properties['logicalNetworks']
+
+if (-not (Test-IsBlankOrPlaceholder -Value $SubscriptionId)) {
+	if ($hasSubscriptionId) {
+		$config.subscriptionId = $SubscriptionId
+	}
+	else {
+		$config | Add-Member -NotePropertyName subscriptionId -NotePropertyValue $SubscriptionId
+		$hasSubscriptionId = $true
+	}
+
+	Write-Host "Using subscriptionId from parameter: $SubscriptionId"
+}
 
 if (-not $hasSubscriptionId -or (Test-IsBlankOrPlaceholder -Value $config.subscriptionId)) {
 	$subscriptionId = Get-CurrentSubscriptionId
