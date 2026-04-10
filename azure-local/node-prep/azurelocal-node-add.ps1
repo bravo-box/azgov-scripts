@@ -59,8 +59,7 @@ $RG = Read-Host -Prompt "Enter the Resource Group Name for your Azure Local clus
 #Define the proxy address if your Azure Local deployment accesses the internet via proxy
 #$ProxyServer = "http://proxyaddress:port"
 
-#Optional: Define the Azure Resource Manager access token.
-# Required only if you want to use token-based authentication instead of device code authentication.
+# Get Access Token
 $armTokenResponse = Get-AzAccessToken
 
 # Convert token to string for use in initialization
