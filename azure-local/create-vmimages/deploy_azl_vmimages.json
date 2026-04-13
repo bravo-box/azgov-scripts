@@ -52,7 +52,7 @@
     },
     "containerName": {
       "type": "string",
-      "defaultValue": "vhds",
+      "defaultValue": "vmimage",
       "metadata": {
         "description": "Name of the blob container in the storage account"
       }

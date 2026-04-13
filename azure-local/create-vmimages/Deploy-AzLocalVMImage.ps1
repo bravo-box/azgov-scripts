@@ -138,7 +138,7 @@ param(
     [string]$ImageNamePrefix = "",
 
     [Parameter(Mandatory = $false)]
-    [string]$ContainerName = "vmimages",
+    [string]$ContainerName = "vmimage",
 
     [Parameter(Mandatory = $false)]
     [ValidateSet("Windows", "Linux")]
