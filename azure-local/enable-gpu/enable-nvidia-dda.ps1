@@ -224,7 +224,8 @@ if (Test-Path $extractPath) {
     Write-Host "Available GPU model drivers:" -ForegroundColor Yellow
     Get-ChildItem $extractPath -Filter "*_base.inf" | ForEach-Object {
         $modelName = $_.Name -replace "_base.inf", "" -replace "nvidia_azure_stack_", ""
-        Write-Host "  - $modelName: $($_.Name)"
+        $fullName = $_.Name
+        Write-Host "  - $($modelName): $($fullName)"
     }
     
     Write-Host ""
