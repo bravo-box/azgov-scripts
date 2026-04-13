@@ -59,8 +59,12 @@ $RG = Read-Host -Prompt "Enter the Resource Group Name for your Azure Local clus
 #Define the proxy address if your Azure Local deployment accesses the internet via proxy
 #$ProxyServer = "http://proxyaddress:port"
 
-#Get the Access Token for the registration
-$ARMtoken = (Get-AzAccessToken -WarningAction SilentlyContinue).Token
+# Get Access Token
+$armTokenResponse = Get-AzAccessToken
+
+# Convert token to string for use in initialization
+# Required because Get-AzAccessToken returns SecureString
+$ArmAccessToken = [System.Net.NetworkCredential]::new("", $armTokenResponse.Token).Password
 
 #Invoke the registration script. Use a supported region.
 Invoke-AzStackHciArcInitialization -SubscriptionID $subscriptionId -ResourceGroup $RG -TenantID $tenantId -Region $Region -Cloud "AzureUSGovernment" -ArmAccessToken $ARMtoken -AccountID $id
